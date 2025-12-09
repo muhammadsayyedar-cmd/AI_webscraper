@@ -83,7 +83,18 @@ function cleanContent(content: string): string {
       'staying in touch with',
       'we cannot accept donations',
       'will you commit',
-      'support and advice we get from donors'
+      'support and advice we get from donors',
+      'wikipedia will only turn',
+      'birthday gift',
+      'donor privacy policy',
+      'sorry to interrupt',
+      'internet we were promised',
+      '25 years',
+      'unsubscribe options',
+      'support us with',
+      'wikipedia is still',
+      'owned by a nonprofit',
+      'not a billionaire'
     ];
 
     for (const indicator of strongDonationIndicators) {
