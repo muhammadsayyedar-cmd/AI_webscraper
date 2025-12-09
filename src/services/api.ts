@@ -116,7 +116,7 @@ export async function analyzeWithGeminiResearch(content: string, keywords: strin
          5. Every section of your analysis must relate to the keywords`
       : 'Analyze the main content, ignoring any donation messages or banners.';
 
-    const prompt = `You are an expert researcher and analyst. Analyze the following web content.
+    const prompt = `You are a complete web intelligence assistant. Analyze the following web content and provide comprehensive insights.
 
 ${keywordInstruction}
 
@@ -134,12 +134,18 @@ Please provide your analysis in the following structure:
 **SOURCE SUMMARY:**
 Provide 2-3 paragraphs explaining what this webpage/content is about. What is the main message or purpose? What information is being conveyed? ${keywords.length > 0 ? `Focus specifically on aspects related to: ${keywords.join(', ')}` : ''}
 
+**SHORT SUMMARY:**
+Provide a concise 150-word summary that captures the essence of the content.
+
+**KEY HIGHLIGHTS:**
+List 5-10 key bullet points that capture the most important takeaways from the content.
+${keywords.length > 0 ? `Each highlight should relate to: ${keywords.join(', ')}` : ''}
+
 **VERIFIED ORIGIN / MOMENT OF TRUTH:**
 Provide historical context and analysis:
 - When did this topic/subject first originate or become relevant?
 - What are the key historical milestones or "moments of truth"?
 - Include specific dates and events where applicable
-- Cite the earliest verifiable mentions or developments
 ${keywords.length > 0 ? `- Focus specifically on the history of: ${keywords.join(', ')}` : ''}
 
 **LATEST UPDATES & FUTURE FORECAST:**
@@ -148,12 +154,22 @@ Analyze current state and future trends:
 - What recent developments or changes have occurred?
 - What are the emerging trends?
 - What predictions can be made about the future direction?
-- Include specific data points, statistics, or expert predictions if mentioned
 ${keywords.length > 0 ? `- Focus predictions on: ${keywords.join(', ')}` : ''}
 
-**KEY INSIGHTS:**
-List 5 key bullet points (numbered) that capture the most important takeaways from the content.
-${keywords.length > 0 ? `Each insight should relate to: ${keywords.join(', ')}` : ''}
+${keywords.length > 0 ? `**KEYWORD RELEVANCE SCORE:**
+Rate how relevant this content is to the keywords "${keywords.join(', ')}" on a scale of 0-10.
+Format: "Score: X/10"` : ''}
+
+**SOCIAL MEDIA POSTS:**
+
+LinkedIn Post (Professional, 200-250 characters):
+[Write an engaging LinkedIn post about this content]
+
+Twitter Post (Concise, under 280 characters, include 2-3 relevant hashtags):
+[Write a Twitter post about this content]
+
+Instagram Caption (Engaging, 100-150 words, include 5-8 relevant hashtags):
+[Write an Instagram caption about this content]
 
 Format your response clearly with these exact section headers.`;
 
@@ -333,19 +349,67 @@ function createFallbackAnalysis(content: string, keywords: string[], url: string
 }
 
 function parseResearchAnalysis(text: string, content: string, keywords: string[]) {
-  const result = {
+  const result: {
+    sourceSummary: string;
+    verifiedOrigin: string;
+    futureForcast: string;
+    keyInsights: { text: string; importance: number }[];
+    summary: string;
+    keyHighlights?: string[];
+    shortSummary?: string;
+    keywordRelevanceScore?: number;
+    linkedinPost?: string;
+    twitterPost?: string;
+    instagramCaption?: string;
+  } = {
     sourceSummary: '',
     verifiedOrigin: '',
     futureForcast: '',
-    keyInsights: [] as { text: string; importance: number }[],
-    summary: ''
+    keyInsights: [],
+    summary: '',
+    keyHighlights: [],
+    shortSummary: '',
+    keywordRelevanceScore: undefined,
+    linkedinPost: '',
+    twitterPost: '',
+    instagramCaption: ''
   };
 
   // Extract Source Summary
-  const summaryMatch = text.match(/\*\*SOURCE SUMMARY:?\*\*\s*([\s\S]*?)(?=\*\*VERIFIED ORIGIN|\*\*LATEST UPDATES|$)/i);
+  const summaryMatch = text.match(/\*\*SOURCE SUMMARY:?\*\*\s*([\s\S]*?)(?=\*\*SHORT SUMMARY|\*\*KEY HIGHLIGHTS|\*\*VERIFIED ORIGIN|$)/i);
   if (summaryMatch) {
     result.sourceSummary = summaryMatch[1].trim();
-    result.summary = result.sourceSummary.split('\n\n')[0]; // First paragraph as summary
+    result.summary = result.sourceSummary.split('\n\n')[0];
+  }
+
+  // Extract Short Summary (150 words)
+  const shortSummaryMatch = text.match(/\*\*SHORT SUMMARY:?\*\*\s*([\s\S]*?)(?=\*\*KEY HIGHLIGHTS|\*\*VERIFIED ORIGIN|$)/i);
+  if (shortSummaryMatch) {
+    result.shortSummary = shortSummaryMatch[1].trim();
+  }
+
+  // Extract Key Highlights (5-10 bullet points)
+  const highlightsMatch = text.match(/\*\*KEY HIGHLIGHTS:?\*\*\s*([\s\S]*?)(?=\*\*VERIFIED ORIGIN|\*\*LATEST UPDATES|$)/i);
+  if (highlightsMatch) {
+    const highlightsText = highlightsMatch[1];
+    const bulletPoints = highlightsText
+      .split('\n')
+      .filter(line => line.trim().match(/^[\d\-\*•]/))
+      .slice(0, 10)
+      .map(point => {
+        let cleaned = point.replace(/^[\d\-\*•.\s]+/, '').trim();
+        cleaned = cleaned.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '');
+        cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+        cleaned = cleaned.replace(/<[^>]+>/g, '');
+        return cleaned.trim();
+      })
+      .filter(text => text.length > 10);
+
+    result.keyHighlights = bulletPoints;
+    result.keyInsights = bulletPoints.map((text, index) => ({
+      text,
+      importance: 10 - index
+    }));
   }
 
   // Extract Verified Origin
@@ -355,43 +419,50 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
   }
 
   // Extract Future Forecast
-  const forecastMatch = text.match(/\*\*LATEST UPDATES[^*]*:?\*\*\s*([\s\S]*?)(?=\*\*KEY INSIGHTS|$)/i);
+  const forecastMatch = text.match(/\*\*LATEST UPDATES[^*]*:?\*\*\s*([\s\S]*?)(?=\*\*KEYWORD RELEVANCE|\*\*SOCIAL MEDIA|$)/i);
   if (forecastMatch) {
     result.futureForcast = forecastMatch[1].trim();
   }
 
-  // Extract Key Insights with cleaning
-  const insightsMatch = text.match(/\*\*KEY INSIGHTS:?\*\*\s*([\s\S]*?)$/i);
-  if (insightsMatch) {
-    const insightsText = insightsMatch[1];
-    const bulletPoints = insightsText
-      .split('\n')
-      .filter(line => line.trim().match(/^[\d\-\*•]/))
-      .slice(0, 5)
-      .map(point => {
-        // Clean up the text
-        let cleaned = point.replace(/^[\d\-\*•.\s]+/, '').trim();
-        // Remove markdown images: ![alt](url)
-        cleaned = cleaned.replace(/!\[([^\]]*)\]\([^\)]+\)/g, '');
-        // Remove markdown links: [text](url)
-        cleaned = cleaned.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-        // Remove HTML tags
-        cleaned = cleaned.replace(/<[^>]+>/g, '');
-        return cleaned.trim();
-      })
-      .filter(text => text.length > 10); // Only keep substantial insights
+  // Extract Keyword Relevance Score
+  const scoreMatch = text.match(/\*\*KEYWORD RELEVANCE SCORE:?\*\*\s*[\s\S]*?Score:\s*(\d+(?:\.\d+)?)\s*\/\s*10/i);
+  if (scoreMatch) {
+    result.keywordRelevanceScore = parseFloat(scoreMatch[1]);
+  }
 
-    result.keyInsights = bulletPoints.map((text, index) => ({
-      text,
-      importance: 9 - index
-    }));
+  // Extract Social Media Posts
+  const socialMediaMatch = text.match(/\*\*SOCIAL MEDIA POSTS:?\*\*/i);
+  if (socialMediaMatch) {
+    // Extract LinkedIn Post
+    const linkedinMatch = text.match(/LinkedIn Post[^:]*:\s*([\s\S]*?)(?=Twitter Post|$)/i);
+    if (linkedinMatch) {
+      result.linkedinPost = linkedinMatch[1]
+        .replace(/\[Write[^\]]*\]/gi, '')
+        .trim();
+    }
+
+    // Extract Twitter Post
+    const twitterMatch = text.match(/Twitter Post[^:]*:\s*([\s\S]*?)(?=Instagram Caption|$)/i);
+    if (twitterMatch) {
+      result.twitterPost = twitterMatch[1]
+        .replace(/\[Write[^\]]*\]/gi, '')
+        .trim();
+    }
+
+    // Extract Instagram Caption
+    const instagramMatch = text.match(/Instagram Caption[^:]*:\s*([\s\S]*?)(?=\*\*|$)/i);
+    if (instagramMatch) {
+      result.instagramCaption = instagramMatch[1]
+        .replace(/\[Write[^\]]*\]/gi, '')
+        .trim();
+    }
   }
 
   // Fallback if parsing failed
   if (!result.sourceSummary || !result.verifiedOrigin || !result.futureForcast) {
     console.warn('⚠️ Parsing incomplete, using fallback for missing sections');
     const fallback = createFallbackAnalysis(content, keywords, '');
-    
+
     if (!result.sourceSummary) result.sourceSummary = fallback.sourceSummary;
     if (!result.verifiedOrigin) result.verifiedOrigin = fallback.verifiedOrigin;
     if (!result.futureForcast) result.futureForcast = fallback.futureForcast;
@@ -462,6 +533,13 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
       // Enhanced research fields
       verified_origin: analysisResult.verifiedOrigin,
       future_forecast: analysisResult.futureForcast,
+      // New social media and keyword fields
+      keyword_relevance_score: analysisResult.keywordRelevanceScore,
+      linkedin_post: analysisResult.linkedinPost,
+      twitter_post: analysisResult.twitterPost,
+      instagram_caption: analysisResult.instagramCaption,
+      key_highlights: analysisResult.keyHighlights,
+      short_summary: analysisResult.shortSummary,
     };
 
     console.log('✅ Enhanced scrape with AI research completed!');

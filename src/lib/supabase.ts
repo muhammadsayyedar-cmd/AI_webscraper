@@ -12,7 +12,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export interface ScrapeData {
   id?: string;
   created_at?: string;
-  user_id?: string; // Added for user-specific data
+  user_id?: string;
   url: string;
   title?: string;
   meta_description?: string;
@@ -34,9 +34,15 @@ export interface ScrapeData {
   };
   raw_content?: string;
   ai_summary?: string;
-  // New fields for AI Research & Analysis
   verified_origin?: string;
   future_forecast?: string;
+  // New fields for social media and keyword relevance
+  keyword_relevance_score?: number;
+  linkedin_post?: string;
+  twitter_post?: string;
+  instagram_caption?: string;
+  key_highlights?: string[];
+  short_summary?: string;
 }
 
 // Auth helper functions
