@@ -154,7 +154,7 @@ ${keywords.length > 0 ? `Each insight should relate to: ${keywords.join(', ')}` 
 Format your response clearly with these exact section headers.`;
 
     const response = await fetch(
-      `${GEMINI_API_URL}/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `${GEMINI_API_URL}/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: {
