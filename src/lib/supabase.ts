@@ -41,6 +41,7 @@ export interface ScrapeData {
   linkedin_post?: string;
   twitter_post?: string;
   instagram_caption?: string;
+  facebook_post?: string;
   key_highlights?: string[];
   short_summary?: string;
 }

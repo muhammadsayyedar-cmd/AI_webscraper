@@ -116,30 +116,44 @@ export async function analyzeWithGeminiResearch(content: string, keywords: strin
          5. Every section of your analysis must relate to the keywords`
       : 'Analyze the main content, ignoring any donation messages or banners.';
 
-    const prompt = `You are a complete web intelligence assistant. Analyze the following web content and provide comprehensive insights.
+    const prompt = `You are a complete web intelligence assistant. Analyze the following web content and provide comprehensive, detailed insights.
 
 ${keywordInstruction}
 
 URL: ${url}
 Content to analyze:
-${content.substring(0, 8000)}
+${content.substring(0, 10000)}
 
 IMPORTANT INSTRUCTIONS:
 1. SKIP any donation messages, fundraising appeals, or banner content
 2. Focus ONLY on the main article/page content
 3. ${keywords.length > 0 ? `Pay special attention to: ${keywords.join(', ')}` : 'Focus on the primary topic'}
+4. Provide DETAILED and COMPREHENSIVE information - go deep into the topic
+5. Extract specific facts, figures, names, dates, and quotes from the content
 
 Please provide your analysis in the following structure:
 
 **SOURCE SUMMARY:**
-Provide 2-3 paragraphs explaining what this webpage/content is about. What is the main message or purpose? What information is being conveyed? ${keywords.length > 0 ? `Focus specifically on aspects related to: ${keywords.join(', ')}` : ''}
+Provide 4-5 DETAILED paragraphs (minimum 400 words) explaining what this webpage/content is about. Include:
+- The main topic and why it's important
+- Key facts, statistics, and data points mentioned
+- Important names, organizations, or entities involved
+- Specific details and context from the article
+- Background information and significance
+${keywords.length > 0 ? `Focus specifically on aspects related to: ${keywords.join(', ')}` : ''}
+Be thorough and comprehensive - extract ALL important information from the content.
 
 **SHORT SUMMARY:**
-Provide a concise 150-word summary that captures the essence of the content.
+Provide a detailed 250-300 word summary that captures the essence of the content. Include key facts, figures, names, dates, and the main points. Make it informative and substantial.
 
 **KEY HIGHLIGHTS:**
-List 5-10 key bullet points that capture the most important takeaways from the content.
+List 8-10 DETAILED bullet points that capture the most important takeaways. Each point should be substantial (2-3 sentences) and include:
+- Specific facts, numbers, or data
+- Names of people, companies, or organizations
+- Important context or implications
+- Action items or key developments
 ${keywords.length > 0 ? `Each highlight should relate to: ${keywords.join(', ')}` : ''}
+Make each highlight informative and actionable with concrete details.
 
 **VERIFIED ORIGIN / MOMENT OF TRUTH:**
 Provide historical context and analysis:
@@ -162,14 +176,17 @@ Format: "Score: X/10"` : ''}
 
 **SOCIAL MEDIA POSTS:**
 
-LinkedIn Post (Professional, 200-250 characters):
-[Write an engaging LinkedIn post about this content]
+LinkedIn Post (Professional, engaging, 300-400 characters with key facts):
+[Write a professional LinkedIn post with specific details, facts, and a call-to-action]
 
-Twitter Post (Concise, under 280 characters, include 2-3 relevant hashtags):
-[Write a Twitter post about this content]
+Twitter/X Post (Concise, under 280 characters, include 2-3 trending hashtags):
+[Write an attention-grabbing Twitter post with key stats and hashtags]
 
-Instagram Caption (Engaging, 100-150 words, include 5-8 relevant hashtags):
-[Write an Instagram caption about this content]
+Instagram Caption (Engaging storytelling, 150-200 words, include 8-10 relevant hashtags):
+[Write an engaging Instagram caption with narrative style and hashtags]
+
+Facebook Post (Conversational, 200-300 words with key details):
+[Write a conversational Facebook post that encourages engagement]
 
 Format your response clearly with these exact section headers.`;
 
@@ -186,7 +203,7 @@ Format your response clearly with these exact section headers.`;
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 2500,
+            maxOutputTokens: 4000,
           }
         }),
       }
@@ -361,6 +378,7 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
     linkedinPost?: string;
     twitterPost?: string;
     instagramCaption?: string;
+    facebookPost?: string;
   } = {
     sourceSummary: '',
     verifiedOrigin: '',
@@ -372,7 +390,8 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
     keywordRelevanceScore: undefined,
     linkedinPost: '',
     twitterPost: '',
-    instagramCaption: ''
+    instagramCaption: '',
+    facebookPost: ''
   };
 
   // Extract Source Summary
@@ -434,7 +453,7 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
   const socialMediaMatch = text.match(/\*\*SOCIAL MEDIA POSTS:?\*\*/i);
   if (socialMediaMatch) {
     // Extract LinkedIn Post
-    const linkedinMatch = text.match(/LinkedIn Post[^:]*:\s*([\s\S]*?)(?=Twitter Post|$)/i);
+    const linkedinMatch = text.match(/LinkedIn Post[^:]*:\s*([\s\S]*?)(?=Twitter|Instagram|Facebook|$)/i);
     if (linkedinMatch) {
       result.linkedinPost = linkedinMatch[1]
         .replace(/\[Write[^\]]*\]/gi, '')
@@ -442,7 +461,7 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
     }
 
     // Extract Twitter Post
-    const twitterMatch = text.match(/Twitter Post[^:]*:\s*([\s\S]*?)(?=Instagram Caption|$)/i);
+    const twitterMatch = text.match(/Twitter[^\n]*Post[^:]*:\s*([\s\S]*?)(?=Instagram|Facebook|$)/i);
     if (twitterMatch) {
       result.twitterPost = twitterMatch[1]
         .replace(/\[Write[^\]]*\]/gi, '')
@@ -450,9 +469,17 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
     }
 
     // Extract Instagram Caption
-    const instagramMatch = text.match(/Instagram Caption[^:]*:\s*([\s\S]*?)(?=\*\*|$)/i);
+    const instagramMatch = text.match(/Instagram Caption[^:]*:\s*([\s\S]*?)(?=Facebook|$)/i);
     if (instagramMatch) {
       result.instagramCaption = instagramMatch[1]
+        .replace(/\[Write[^\]]*\]/gi, '')
+        .trim();
+    }
+
+    // Extract Facebook Post
+    const facebookMatch = text.match(/Facebook Post[^:]*:\s*([\s\S]*?)(?=\*\*|$)/i);
+    if (facebookMatch) {
+      result.facebookPost = facebookMatch[1]
         .replace(/\[Write[^\]]*\]/gi, '')
         .trim();
     }
@@ -538,6 +565,7 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
       linkedin_post: analysisResult.linkedinPost,
       twitter_post: analysisResult.twitterPost,
       instagram_caption: analysisResult.instagramCaption,
+      facebook_post: analysisResult.facebookPost,
       key_highlights: analysisResult.keyHighlights,
       short_summary: analysisResult.shortSummary,
     };
