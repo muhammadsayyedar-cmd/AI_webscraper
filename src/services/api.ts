@@ -6,6 +6,9 @@ const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v1';
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
 const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
 // ==============================================
 // FIRECRAWL API INTEGRATION - FIXED
 // ==============================================
@@ -230,4 +233,89 @@ function parseResearchAnalysis(text: string, content: string, keywords: string[]
     keyInsights: keyHighlights.map((t, i) => ({ text: t, importance: 10 - i })),
     summary: read('SHORT SUMMARY') || read('SOURCE SUMMARY'),
   };
+}
+
+// ==============================================
+// MAIN SCRAPING FUNCTION (Uses Edge Function)
+// ==============================================
+
+export async function performScrape(url: string, keywords: string[] = [], useGemini: boolean = true) {
+  try {
+    const apiUrl = `${SUPABASE_URL}/functions/v1/scrape-website`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        keywords,
+        useGemini,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Edge function error:', errorText);
+      throw new Error(`Scraping failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('performScrape error:', error);
+    throw error;
+  }
+}
+
+// ==============================================
+// SAVE SCRAPE TO DATABASE
+// ==============================================
+
+export async function saveScrape(scrapeData: ScrapeData) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .from('scrapes')
+      .insert([{
+        user_id: user.id,
+        url: scrapeData.url,
+        title: scrapeData.title,
+        meta_description: scrapeData.meta_description,
+        keywords: scrapeData.keywords,
+        links: scrapeData.links,
+        highlighted_content: scrapeData.highlighted_content,
+        og_data: scrapeData.og_data,
+        raw_content: scrapeData.raw_content,
+        ai_summary: scrapeData.ai_summary,
+        verified_origin: scrapeData.verified_origin,
+        future_forecast: scrapeData.future_forecast,
+        keyword_relevance_score: scrapeData.keyword_relevance_score,
+        linkedin_post: scrapeData.linkedin_post,
+        twitter_post: scrapeData.twitter_post,
+        instagram_caption: scrapeData.instagram_caption,
+        facebook_post: scrapeData.facebook_post,
+        key_highlights: scrapeData.key_highlights,
+        short_summary: scrapeData.short_summary,
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('saveScrape error:', error);
+    return { success: false, error };
+  }
 }
