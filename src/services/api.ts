@@ -94,10 +94,10 @@ export async function scrapeWithFireCrawl(options: FireCrawlScrapeOptions) {
 // ENHANCED GEMINI AI - FIXED WITH KEYWORD FOCUS
 // ==============================================
 
-export async function analyzeWithGeminiResearch(content: string, keywords: string[], url: string) {
+export async function analyzeWithGeminiResearch(content: string, keywords: string[], url: string, title?: string) {
   if (!GEMINI_API_KEY) {
     console.warn('⚠️ Gemini API key is missing - using fallback analysis');
-    return createFallbackAnalysis(content, keywords, url);
+    return createFallbackAnalysis(content, keywords, url, title);
   }
 
   try {
@@ -180,7 +180,7 @@ Format your response clearly with these exact section headers.`;
       const errorText = await response.text();
       console.error('❌ Gemini API Error:', errorText);
       console.warn('⚠️ Falling back to basic analysis');
-      return createFallbackAnalysis(content, keywords, url);
+      return createFallbackAnalysis(content, keywords, url, title);
     }
 
     const data = await response.json();
@@ -188,13 +188,13 @@ Format your response clearly with these exact section headers.`;
 
     if (!aiResponse) {
       console.warn('⚠️ Empty Gemini response - using fallback');
-      return createFallbackAnalysis(content, keywords, url);
+      return createFallbackAnalysis(content, keywords, url, title);
     }
 
     // Check if Gemini detected no keyword match
     if (aiResponse.startsWith('NO KEYWORD MATCH:')) {
       console.warn('⚠️ Gemini detected no keyword matches - using strict fallback');
-      return createFallbackAnalysis(content, keywords, url);
+      return createFallbackAnalysis(content, keywords, url, title);
     }
 
     console.log('✅ Gemini research analysis complete');
@@ -210,12 +210,15 @@ Format your response clearly with these exact section headers.`;
   } catch (error) {
     console.error('❌ Gemini Error:', error);
     console.warn('⚠️ Falling back to basic analysis');
-    return createFallbackAnalysis(content, keywords, url);
+    return createFallbackAnalysis(content, keywords, url, title);
   }
 }
 
-function createFallbackAnalysis(content: string, keywords: string[], url: string) {
+function createFallbackAnalysis(content: string, keywords: string[], url: string, title?: string) {
   console.log('📋 Creating fallback analysis...');
+  console.log('📝 Content length:', content.length);
+  console.log('🎯 Keywords to match:', keywords);
+  console.log('📰 Title:', title);
 
   // Clean content first - remove markdown images, links, and donation messages
   let cleanedContent = content
@@ -226,36 +229,30 @@ function createFallbackAnalysis(content: string, keywords: string[], url: string
     .replace(/You deserve an explanation.*?\$2\.75.*?knowledge\.?/gis, '')
     .trim();
 
-  // IMPROVED: Better keyword filtering with context
+  // IMPROVED: Better keyword filtering - split multi-word phrases and match individual words
   let relevantContent = cleanedContent;
   let keywordMatchCount = 0;
+  const searchableText = `${title || ''}\n\n${cleanedContent}`.toLowerCase();
 
   if (keywords.length > 0) {
-    const paragraphs = cleanedContent.split(/\n\n+/).filter(p => p.trim().length > 30);
-    const keywordRegex = new RegExp(keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+    // Split multi-word keywords into individual words for more flexible matching
+    const individualKeywords = keywords.flatMap(k =>
+      k.split(/\s+/).filter(word => word.length > 2) // Split phrases, ignore tiny words
+    );
 
-    // Find paragraphs with keyword matches and include surrounding context
-    const relevantParagraphs: string[] = [];
-    paragraphs.forEach((para, index) => {
-      const matches = para.match(keywordRegex);
-      if (matches) {
-        keywordMatchCount += matches.length;
-        // Include the paragraph and potentially adjacent ones for context
-        if (index > 0 && !relevantParagraphs.includes(paragraphs[index - 1])) {
-          relevantParagraphs.push(paragraphs[index - 1]);
-        }
-        relevantParagraphs.push(para);
-        if (index < paragraphs.length - 1 && !relevantParagraphs.includes(paragraphs[index + 1])) {
-          relevantParagraphs.push(paragraphs[index + 1]);
-        }
-      }
-    });
+    console.log('🔍 Searching for individual keywords:', individualKeywords);
 
-    if (relevantParagraphs.length > 0) {
-      relevantContent = relevantParagraphs.join('\n\n');
-      console.log(`✅ Found ${keywordMatchCount} keyword matches in ${relevantParagraphs.length} paragraphs`);
-    } else {
+    // Check if ANY keyword appears in title or content
+    const matchedKeywords = individualKeywords.filter(keyword =>
+      searchableText.includes(keyword.toLowerCase())
+    );
+
+    console.log('✅ Matched keywords:', matchedKeywords);
+
+    if (matchedKeywords.length === 0) {
       console.warn(`⚠️ No matches found for keywords: ${keywords.join(', ')}`);
+      console.log('📄 Content preview:', cleanedContent.substring(0, 500));
+
       return {
         success: false,
         sourceSummary: `⚠️ No content found matching the keywords: "${keywords.join(', ')}". The scraped page does not contain information about these topics.`,
@@ -268,6 +265,32 @@ function createFallbackAnalysis(content: string, keywords: string[], url: string
         ],
         summary: `No content matching keywords: ${keywords.join(', ')}`
       };
+    }
+
+    console.log(`✅ Found ${matchedKeywords.length} matching keywords out of ${individualKeywords.length}`);
+
+    // Extract relevant paragraphs
+    const paragraphs = cleanedContent.split(/\n\n+/).filter(p => p.trim().length > 30);
+    const keywordRegex = new RegExp(matchedKeywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+
+    const relevantParagraphs: string[] = [];
+    paragraphs.forEach((para, index) => {
+      const matches = para.match(keywordRegex);
+      if (matches) {
+        keywordMatchCount += matches.length;
+        if (index > 0 && !relevantParagraphs.includes(paragraphs[index - 1])) {
+          relevantParagraphs.push(paragraphs[index - 1]);
+        }
+        relevantParagraphs.push(para);
+        if (index < paragraphs.length - 1 && !relevantParagraphs.includes(paragraphs[index + 1])) {
+          relevantParagraphs.push(paragraphs[index + 1]);
+        }
+      }
+    });
+
+    if (relevantParagraphs.length > 0) {
+      relevantContent = relevantParagraphs.join('\n\n');
+      console.log(`✅ Extracted ${relevantParagraphs.length} relevant paragraphs with ${keywordMatchCount} keyword matches`);
     }
   }
 
@@ -399,12 +422,14 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
     console.log('✅ Scrape successful, content length:', scrapeResult.data.content.length);
 
     // Step 2: Always perform AI Analysis (it has built-in fallbacks)
+    const pageTitle = scrapeResult.data.metadata.title || scrapeResult.data.title;
     let analysisResult;
     try {
       analysisResult = await analyzeWithGeminiResearch(
         scrapeResult.data.content,
         keywords,
-        url
+        url,
+        pageTitle
       );
       console.log('✅ Analysis complete');
     } catch (aiError) {
@@ -413,7 +438,8 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
       analysisResult = createFallbackAnalysis(
         scrapeResult.data.content,
         keywords,
-        url
+        url,
+        pageTitle
       );
     }
 
