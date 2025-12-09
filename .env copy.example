@@ -1,0 +1,7 @@
+
+VITE_SUPABASE_URL=https://glhosracqsnfixtokspj.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdsaG9zcmFjcXNuZml4dG9rc3BqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxODkyMDQsImV4cCI6MjA4MDc2NTIwNH0.fHQKquvXrpJsRKdTBHvYXEt3Hm9YoBUR_iblQSK76Tw
+VITE_FIRECRAWL_API_KEY=fc-c0478120648a4e13bcb310c9aeb008ff
+# Google Gemini API (Optional - Fallback for OpenAI)
+# Get your API key from: https://makersuite.google.com/app/apikey
+VITE_GEMINI_API_KEY=AIzaSyAqxxy4mWchRSQHgdFXhCIHLg5Lsts5gkE
