@@ -61,13 +61,24 @@ function cleanContent(content: string): string {
     // Remove date banners like "December 8: An important update..."
     .replace(/^[A-Za-z]+ \d+: [^\n]+$/gmi, '')
     // Remove "LIVE" and similar status indicators
-    .replace(/^\s*LIVE\s*$/gmi, '');
+    .replace(/^\s*LIVE\s*$/gmi, '')
+    // Remove Wikipedia menu items and navigation
+    .replace(/^(Main menu|Search|Create account|Log in|Personal tools|Toggle [^\n]+|Contents|Top-level articles)/gmi, '')
+    // Remove citation markers like [1], [2], etc.
+    .replace(/\[\d+\]/g, '')
+    // Remove "edit" links common in Wikipedia
+    .replace(/\[edit\]/gi, '');
 
   // Remove donation/fundraising appeals (Wikipedia banners)
   // Split into paragraphs and filter out fundraising content
   const paragraphs = cleaned.split(/\n\n+/);
   const filteredParagraphs = paragraphs.filter(para => {
     const lowerPara = para.toLowerCase();
+
+    // Skip very short paragraphs (likely navigation)
+    if (para.trim().length < 50) {
+      return false;
+    }
 
     // Strong indicators - remove if ANY of these are found
     const strongDonationIndicators = [
@@ -307,14 +318,18 @@ function createFallbackAnalysis(content: string, keywords: string[], title: stri
     .split(/\n\n+/)
     .filter(p => {
       const trimmed = p.trim();
+      const lowerTrimmed = trimmed.toLowerCase();
       return (
-        trimmed.length > 100 && // Longer paragraphs only
+        trimmed.length > 80 && // Substantial paragraphs
         !trimmed.match(/^[\[\(]/) && // Skip if starts with [ or (
-        !trimmed.match(/^(Skip|Jump|Go to|LIVE|Menu)/i) // Skip navigation
+        !trimmed.match(/^(Skip|Jump|Go to|LIVE|Menu|See also|References|External links|Categories|Contents|Navigation|Article|Talk|Read|View|More|Tools|Print)/i) && // Skip navigation
+        !trimmed.match(/^#+\s/) && // Skip markdown headers
+        !lowerTrimmed.includes('table of contents') &&
+        !lowerTrimmed.includes('from wikipedia')
       );
     });
 
-  // Get the best summary paragraphs
+  // Get the best summary paragraphs - first 3 substantial paragraphs
   const summaryParagraphs = paragraphs.slice(0, 3);
   const summary = summaryParagraphs.join('\n\n') || `${title} - Content extracted from website.`;
 
