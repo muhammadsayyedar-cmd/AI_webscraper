@@ -104,12 +104,16 @@ export async function analyzeWithGeminiResearch(content: string, keywords: strin
     console.log('🔮 Calling Gemini API for deep research analysis...');
     console.log('🎯 Focusing on keywords:', keywords);
 
-    // FIXED: Make keyword focus much more explicit
+    // IMPROVED: More strict keyword filtering
     const keywordInstruction = keywords.length > 0
-      ? `CRITICAL: Focus your ENTIRE analysis on these specific topics: ${keywords.join(', ')}. 
-         Extract and analyze ONLY content related to these keywords. 
-         Ignore any donation messages, fundraisers, or unrelated content.
-         If the webpage mentions these keywords, provide deep analysis of those sections.`
+      ? `CRITICAL REQUIREMENT: This analysis MUST focus EXCLUSIVELY on: ${keywords.join(', ')}.
+
+         IMPORTANT RULES:
+         1. ONLY extract and analyze content that directly mentions or relates to: ${keywords.join(', ')}
+         2. If the webpage does NOT contain content about these keywords, start your response with "NO KEYWORD MATCH:" and explain what the page is actually about
+         3. COMPLETELY IGNORE any content not related to: ${keywords.join(', ')}
+         4. Skip donation messages, fundraisers, advertisements, and navigation content
+         5. Every section of your analysis must relate to the keywords`
       : 'Analyze the main content, ignoring any donation messages or banners.';
 
     const prompt = `You are an expert researcher and analyst. Analyze the following web content.
@@ -187,6 +191,12 @@ Format your response clearly with these exact section headers.`;
       return createFallbackAnalysis(content, keywords, url);
     }
 
+    // Check if Gemini detected no keyword match
+    if (aiResponse.startsWith('NO KEYWORD MATCH:')) {
+      console.warn('⚠️ Gemini detected no keyword matches - using strict fallback');
+      return createFallbackAnalysis(content, keywords, url);
+    }
+
     console.log('✅ Gemini research analysis complete');
     console.log('📝 Gemini response length:', aiResponse.length);
 
@@ -206,7 +216,7 @@ Format your response clearly with these exact section headers.`;
 
 function createFallbackAnalysis(content: string, keywords: string[], url: string) {
   console.log('📋 Creating fallback analysis...');
-  
+
   // Clean content first - remove markdown images, links, and donation messages
   let cleanedContent = content
     .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '') // Remove images
@@ -215,47 +225,85 @@ function createFallbackAnalysis(content: string, keywords: string[], url: string
     .replace(/December \d+:.*?wikipedia.*?nonprofit.*?billionaire\.?/gis, '') // Remove donation banners
     .replace(/You deserve an explanation.*?\$2\.75.*?knowledge\.?/gis, '')
     .trim();
-  
-  // FIXED: Filter content by keywords if provided
+
+  // IMPROVED: Better keyword filtering with context
   let relevantContent = cleanedContent;
+  let keywordMatchCount = 0;
+
   if (keywords.length > 0) {
-    const lines = cleanedContent.split('\n').filter(line => line.trim().length > 50);
-    const keywordRegex = new RegExp(keywords.join('|'), 'gi');
-    const relevantLines = lines.filter(line => keywordRegex.test(line));
-    
-    if (relevantLines.length > 0) {
-      relevantContent = relevantLines.join('\n\n');
-      console.log(`✅ Filtered content to ${relevantLines.length} lines matching keywords`);
+    const paragraphs = cleanedContent.split(/\n\n+/).filter(p => p.trim().length > 30);
+    const keywordRegex = new RegExp(keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+
+    // Find paragraphs with keyword matches and include surrounding context
+    const relevantParagraphs: string[] = [];
+    paragraphs.forEach((para, index) => {
+      const matches = para.match(keywordRegex);
+      if (matches) {
+        keywordMatchCount += matches.length;
+        // Include the paragraph and potentially adjacent ones for context
+        if (index > 0 && !relevantParagraphs.includes(paragraphs[index - 1])) {
+          relevantParagraphs.push(paragraphs[index - 1]);
+        }
+        relevantParagraphs.push(para);
+        if (index < paragraphs.length - 1 && !relevantParagraphs.includes(paragraphs[index + 1])) {
+          relevantParagraphs.push(paragraphs[index + 1]);
+        }
+      }
+    });
+
+    if (relevantParagraphs.length > 0) {
+      relevantContent = relevantParagraphs.join('\n\n');
+      console.log(`✅ Found ${keywordMatchCount} keyword matches in ${relevantParagraphs.length} paragraphs`);
+    } else {
+      console.warn(`⚠️ No matches found for keywords: ${keywords.join(', ')}`);
+      return {
+        success: false,
+        sourceSummary: `⚠️ No content found matching the keywords: "${keywords.join(', ')}". The scraped page does not contain information about these topics.`,
+        verifiedOrigin: `The URL ${url} was successfully scraped, but it does not contain content related to: ${keywords.join(', ')}. Please verify the URL or try different keywords.`,
+        futureForcast: `No keyword-relevant content was found to analyze or forecast. Try a different URL that contains information about: ${keywords.join(', ')}.`,
+        keyInsights: [
+          { text: `No matches found for keywords: ${keywords.join(', ')}`, importance: 10 },
+          { text: 'The webpage content does not discuss these topics', importance: 9 },
+          { text: 'Try verifying the URL or using different keywords', importance: 8 }
+        ],
+        summary: `No content matching keywords: ${keywords.join(', ')}`
+      };
     }
   }
-  
-  // Extract first few paragraphs as summary
-  const contentLines = relevantContent
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line.length > 50);
-  
-  const summary = contentLines.slice(0, 3).join('\n\n') || 'Content extracted from the website.';
-  
-  // Create basic bullet points from content
-  const bulletPoints = contentLines
+
+  // Extract paragraphs as summary
+  const contentParagraphs = relevantContent
+    .split(/\n\n+/)
+    .map(p => p.trim())
+    .filter(p => p.length > 50);
+
+  const summary = contentParagraphs.slice(0, 2).join('\n\n') || 'Content extracted from the website.';
+
+  // Create bullet points from keyword-relevant content
+  const sentences = relevantContent
+    .split(/[.!?]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 40 && s.length < 200);
+
+  const bulletPoints = sentences
     .slice(0, 5)
-    .map((line, index) => ({
-      text: line.substring(0, 150) + (line.length > 150 ? '...' : ''),
-      importance: 8 - index
+    .map((sentence, index) => ({
+      text: sentence,
+      importance: 9 - index
     }));
 
-  const keywordText = keywords.length > 0 ? ` focusing on ${keywords.join(', ')}` : '';
+  const keywordText = keywords.length > 0 ? ` about ${keywords.join(', ')}` : '';
+  const matchInfo = keywordMatchCount > 0 ? ` (${keywordMatchCount} keyword matches found)` : '';
 
   return {
     success: true,
-    sourceSummary: summary || `This webpage provides information${keywordText}. The content has been successfully extracted and is available for analysis.`,
-    verifiedOrigin: `This content was scraped from ${new URL(url).hostname}${keywordText}. For detailed historical context and origins, the AI analysis feature provides deeper insights when the Gemini API is available.`,
-    futureForcast: `The scraped content${keywordText} represents the current state of the webpage. For future forecasts and trend analysis with AI-powered predictions, ensure the Gemini API key is configured.`,
+    sourceSummary: summary || `This webpage provides information${keywordText}${matchInfo}.`,
+    verifiedOrigin: `Content extracted from ${new URL(url).hostname}${keywordText}${matchInfo}. The analysis focused on sections containing the specified keywords.`,
+    futureForcast: `The scraped content${keywordText} represents the current state of information on this topic${matchInfo}. For AI-powered predictions and trend analysis, ensure the Gemini API is configured.`,
     keyInsights: bulletPoints.length > 0 ? bulletPoints : [
       { text: 'Content successfully extracted from the website', importance: 8 },
-      { text: 'Main content and metadata have been captured', importance: 7 },
-      { text: keywords.length > 0 ? `Analysis focused on: ${keywords.join(', ')}` : 'Enable AI analysis for deeper insights', importance: 6 }
+      { text: keywords.length > 0 ? `Focused on: ${keywords.join(', ')}` : 'Main content captured', importance: 7 },
+      { text: matchInfo || 'Enable AI analysis for deeper insights', importance: 6 }
     ],
     summary: summary.substring(0, 300) || 'Content extracted from website'
   };
