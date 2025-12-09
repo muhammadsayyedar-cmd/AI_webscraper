@@ -74,6 +74,7 @@ export default function Scraper() {
         setError(result.error || 'Failed to scrape website');
       }
     } catch (err) {
+      console.error('Scrape error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
@@ -81,23 +82,57 @@ export default function Scraper() {
   };
 
   const handleSave = async () => {
-    if (!results) return;
+    if (!results) {
+      console.error('No results to save');
+      return;
+    }
 
     setIsSaving(true);
+    setError(''); // Clear any previous errors
+
     try {
-      await saveScrape(results);
-      setSaved(true);
+      console.log('💾 Attempting to save results...', results);
+      
+      const saveResult = await saveScrape(results);
+      
+      console.log('✅ Save result:', saveResult);
+      
+      if (saveResult.success) {
+        setSaved(true);
 
-      confetti({
-        particleCount: 50,
-        spread: 60,
-        origin: { y: 0.7 },
-        colors: ['#10b981', '#34d399'],
-      });
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 },
+          colors: ['#10b981', '#34d399'],
+        });
 
-      setTimeout(() => setSaved(false), 3000);
+        setTimeout(() => setSaved(false), 3000);
+      } else {
+        throw new Error('Save failed - check Supabase connection');
+      }
     } catch (err) {
-      setError('Failed to save scrape');
+      console.error('❌ Save error:', err);
+      
+      // More detailed error message
+      let errorMessage = 'Failed to save scrape. ';
+      if (err instanceof Error) {
+        errorMessage += err.message;
+        
+        // Check for common issues
+        if (err.message.includes('column') || err.message.includes('field')) {
+          errorMessage += ' (Database columns might be missing. Run the SQL update in Supabase.)';
+        } else if (err.message.includes('network') || err.message.includes('fetch')) {
+          errorMessage += ' (Network error. Check your internet connection.)';
+        } else if (err.message.includes('permission') || err.message.includes('policy')) {
+          errorMessage += ' (Database permission error. Check Supabase RLS policies.)';
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Keep error visible longer for debugging
+      setTimeout(() => setError(''), 10000);
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +206,12 @@ export default function Scraper() {
               {error && (
                 <div className="flex items-start space-x-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
                   <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-red-300 text-sm">{error}</p>
+                  <div className="flex-1">
+                    <p className="text-red-300 text-sm font-medium">{error}</p>
+                    <p className="text-red-400/70 text-xs mt-1">
+                      Check browser console (F12) for more details
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -200,6 +240,18 @@ export default function Scraper() {
 
         {results && !isLoading && (
           <div className="space-y-6 animate-fade-in">
+            {error && (
+              <div className="flex items-start space-x-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg animate-fade-in">
+                <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-red-300 text-sm font-medium">{error}</p>
+                  <p className="text-red-400/70 text-xs mt-1">
+                    Check browser console (F12) for more details
+                  </p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Results</h2>
               <div className="flex gap-3">
@@ -207,6 +259,7 @@ export default function Scraper() {
                   onClick={() => {
                     setResults(null);
                     setError('');
+                    setSaved(false);
                   }}
                   className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-all duration-300"
                 >
