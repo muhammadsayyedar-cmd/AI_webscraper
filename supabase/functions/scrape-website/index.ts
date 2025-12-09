@@ -61,7 +61,38 @@ function cleanContent(content: string): string {
     // Remove date banners like "December 8: An important update..."
     .replace(/^[A-Za-z]+ \d+: [^\n]+$/gmi, '')
     // Remove "LIVE" and similar status indicators
-    .replace(/^\s*LIVE\s*$/gmi, '')
+    .replace(/^\s*LIVE\s*$/gmi, '');
+
+  // Remove donation/fundraising appeals (Wikipedia banners)
+  // Split into paragraphs and filter out fundraising content
+  const paragraphs = cleaned.split(/\n\n+/);
+  const filteredParagraphs = paragraphs.filter(para => {
+    const lowerPara = para.toLowerCase();
+    // Remove paragraphs containing donation/fundraising keywords
+    const donationKeywords = [
+      'donate',
+      'donation',
+      'fundraiser',
+      'gave $',
+      'give $',
+      'contribut',
+      'nonprofit',
+      'if you have given',
+      'readers donate',
+      'worth of knowledge',
+      'hit our goal'
+    ];
+
+    // If paragraph contains multiple donation keywords, remove it
+    const matchCount = donationKeywords.filter(keyword => lowerPara.includes(keyword)).length;
+    if (matchCount >= 2) {
+      return false;
+    }
+
+    return true;
+  });
+
+  cleaned = filteredParagraphs.join('\n\n')
     // Remove extra whitespace
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -138,6 +169,9 @@ async function generateGeminiAnalysis(content: string, keywords: string[], url: 
     return createFallbackAnalysis(content, keywords, title);
   }
 
+  // Clean the content before analysis
+  const cleanedContent = cleanContent(content);
+
   const keywordInstruction = keywords.length > 0
     ? `CRITICAL: Focus EXCLUSIVELY on: ${keywords.join(', ')}. ONLY extract content related to these keywords.`
     : 'Analyze the main content thoroughly.';
@@ -149,7 +183,7 @@ ${keywordInstruction}
 URL: ${url}
 Title: ${title}
 Content:
-${content.substring(0, 10000)}
+${cleanedContent.substring(0, 10000)}
 
 Provide your analysis in this structure:
 
@@ -215,26 +249,26 @@ Facebook Post (200-300 words, conversational):
 
     if (!response.ok) {
       console.error('Gemini API error:', response.status);
-      return createFallbackAnalysis(content, keywords, title);
+      return createFallbackAnalysis(cleanedContent, keywords, title);
     }
 
     const data = await response.json();
     const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     if (!aiResponse) {
-      return createFallbackAnalysis(content, keywords, title);
+      return createFallbackAnalysis(cleanedContent, keywords, title);
     }
 
-    return parseGeminiResponse(aiResponse, content, keywords);
+    return parseGeminiResponse(aiResponse, cleanedContent, keywords);
   } catch (error) {
     console.error('Gemini error:', error);
-    return createFallbackAnalysis(content, keywords, title);
+    return createFallbackAnalysis(cleanedContent, keywords, title);
   }
 }
 
 function createFallbackAnalysis(content: string, keywords: string[], title: string) {
-  // Clean the content first
-  const cleanedContent = cleanContent(content);
+  // Content should already be cleaned, but ensure it
+  const cleanedContent = content.includes('[Jump to') ? cleanContent(content) : content;
 
   // Extract meaningful paragraphs (skip short ones and navigation)
   const paragraphs = cleanedContent
