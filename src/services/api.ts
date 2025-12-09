@@ -510,13 +510,7 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
     console.log('📊 Keywords:', keywords);
     console.log('🤖 AI Analysis:', useGemini ? 'Enabled' : 'Disabled');
 
-    // Call the Supabase Edge Function instead of direct API calls
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (!session) {
-      throw new Error('You must be logged in to use the scraper');
-    }
-
+    // Call the Supabase Edge Function
     const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-website`;
 
     console.log('🌐 Calling edge function:', functionUrl);
@@ -524,7 +518,7 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
     const response = await fetch(functionUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
