@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Search, Loader2, Globe, Tag, Save, Check, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { performScrape } from '../services/api';
-import { supabase } from '../lib/supabase';
+import { performScrape, saveScrape } from '../services/api';
 import { ScrapeData } from '../lib/supabase';
 import ResultsDisplay from './ResultsDisplay';
 import LoadingProgress from './LoadingProgress';
@@ -86,14 +85,7 @@ export default function Scraper() {
 
     setIsSaving(true);
     try {
-      const { data, error: saveError } = await supabase
-        .from('scrapes')
-        .insert([results])
-        .select()
-        .single();
-
-      if (saveError) throw saveError;
-
+      await saveScrape(results);
       setSaved(true);
 
       confetti({
@@ -105,8 +97,7 @@ export default function Scraper() {
 
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      console.error('Save error:', err);
-      setError('Failed to save scrape: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      setError('Failed to save scrape');
     } finally {
       setIsSaving(false);
     }
