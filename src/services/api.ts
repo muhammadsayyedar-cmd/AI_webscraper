@@ -510,73 +510,84 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
     console.log('📊 Keywords:', keywords);
     console.log('🤖 AI Analysis:', useGemini ? 'Enabled' : 'Disabled');
 
-    // Step 1: Scrape with FireCrawl
-    const scrapeResult = await scrapeWithFireCrawl({ url, keywords });
+    // Call the Supabase Edge Function instead of direct API calls
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session) {
+      throw new Error('You must be logged in to use the scraper');
+    }
+
+    const functionUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-website`;
+
+    console.log('🌐 Calling edge function:', functionUrl);
+
+    const response = await fetch(functionUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        keywords,
+        useGemini
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Edge function error:', errorText);
+      throw new Error(`Scraping failed: ${response.status} - ${errorText}`);
+    }
+
+    const scrapeResult = await response.json();
 
     if (!scrapeResult.success) {
-      throw new Error('Failed to scrape website');
+      throw new Error(scrapeResult.error || 'Failed to scrape website');
     }
 
-    console.log('✅ Scrape successful, content length:', scrapeResult.data.content.length);
+    console.log('✅ Edge function completed successfully');
+    console.log('📝 Result data:', scrapeResult.data);
 
-    // Step 2: Always perform AI Analysis (it has built-in fallbacks)
-    const pageTitle = scrapeResult.data.metadata.title || scrapeResult.data.title;
-    let analysisResult;
-    try {
-      analysisResult = await analyzeWithGeminiResearch(
-        scrapeResult.data.content,
-        keywords,
-        url,
-        pageTitle
-      );
-      console.log('✅ Analysis complete');
-    } catch (aiError) {
-      console.error('❌ Critical AI Analysis Error:', aiError);
-      // Ultimate fallback
-      analysisResult = createFallbackAnalysis(
-        scrapeResult.data.content,
-        keywords,
-        url,
-        pageTitle
-      );
+    // Perform additional AI analysis if we have Gemini API key
+    if (useGemini && scrapeResult.data.raw_content) {
+      console.log('🔮 Performing additional AI analysis...');
+
+      try {
+        const pageTitle = scrapeResult.data.title;
+        const analysisResult = await analyzeWithGeminiResearch(
+          scrapeResult.data.raw_content,
+          keywords,
+          url,
+          pageTitle
+        );
+
+        // Enhance the result with detailed AI analysis
+        scrapeResult.data = {
+          ...scrapeResult.data,
+          meta_description: analysisResult.sourceSummary || scrapeResult.data.meta_description,
+          verified_origin: analysisResult.verifiedOrigin,
+          future_forecast: analysisResult.futureForcast,
+          keyword_relevance_score: analysisResult.keywordRelevanceScore,
+          linkedin_post: analysisResult.linkedinPost,
+          twitter_post: analysisResult.twitterPost,
+          instagram_caption: analysisResult.instagramCaption,
+          facebook_post: analysisResult.facebookPost,
+          key_highlights: analysisResult.keyHighlights,
+          short_summary: analysisResult.shortSummary,
+          highlighted_content: analysisResult.keyInsights,
+        };
+
+        console.log('✅ AI analysis complete and merged');
+      } catch (aiError) {
+        console.warn('⚠️ AI analysis failed, using edge function results:', aiError);
+        // Continue with edge function results
+      }
     }
-
-    // Step 3: Combine results with enhanced research data
-    const combinedData: ScrapeData = {
-      url,
-      title: scrapeResult.data.metadata.title || scrapeResult.data.title,
-      meta_description: analysisResult.sourceSummary || scrapeResult.data.metadata.description,
-      keywords,
-      links: scrapeResult.data.links,
-      highlighted_content: analysisResult.keyInsights,
-      og_data: {
-        title: scrapeResult.data.metadata.ogTitle,
-        description: scrapeResult.data.metadata.ogDescription,
-        image: scrapeResult.data.metadata.ogImage,
-        url: scrapeResult.data.metadata.ogUrl,
-      },
-      raw_content: scrapeResult.data.content,
-      ai_summary: analysisResult.summary,
-      // Enhanced research fields
-      verified_origin: analysisResult.verifiedOrigin,
-      future_forecast: analysisResult.futureForcast,
-      // New social media and keyword fields
-      keyword_relevance_score: analysisResult.keywordRelevanceScore,
-      linkedin_post: analysisResult.linkedinPost,
-      twitter_post: analysisResult.twitterPost,
-      instagram_caption: analysisResult.instagramCaption,
-      facebook_post: analysisResult.facebookPost,
-      key_highlights: analysisResult.keyHighlights,
-      short_summary: analysisResult.shortSummary,
-    };
-
-    console.log('✅ Enhanced scrape with AI research completed!');
-    console.log('📝 Result has verified_origin:', !!combinedData.verified_origin);
-    console.log('📝 Result has future_forecast:', !!combinedData.future_forecast);
 
     return {
       success: true,
-      data: combinedData,
+      data: scrapeResult.data as ScrapeData,
     };
   } catch (error) {
     console.error('❌ Scrape Error:', error);
