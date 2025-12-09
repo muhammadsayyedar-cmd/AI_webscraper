@@ -68,7 +68,31 @@ function cleanContent(content: string): string {
   const paragraphs = cleaned.split(/\n\n+/);
   const filteredParagraphs = paragraphs.filter(para => {
     const lowerPara = para.toLowerCase();
-    // Remove paragraphs containing donation/fundraising keywords
+
+    // Strong indicators - remove if ANY of these are found
+    const strongDonationIndicators = [
+      'worth of knowledge',
+      'readers donate',
+      'hit our goal',
+      'our fundraiser',
+      'please donate',
+      'major gifts',
+      'benefactors@',
+      'wikimedia foundation',
+      'accept donations',
+      'staying in touch with',
+      'we cannot accept donations',
+      'will you commit',
+      'support and advice we get from donors'
+    ];
+
+    for (const indicator of strongDonationIndicators) {
+      if (lowerPara.includes(indicator)) {
+        return false;
+      }
+    }
+
+    // Weaker indicators - remove if 2+ are found
     const donationKeywords = [
       'donate',
       'donation',
@@ -77,13 +101,10 @@ function cleanContent(content: string): string {
       'give $',
       'contribut',
       'nonprofit',
-      'if you have given',
-      'readers donate',
-      'worth of knowledge',
-      'hit our goal'
+      'donors',
+      'gifts staff'
     ];
 
-    // If paragraph contains multiple donation keywords, remove it
     const matchCount = donationKeywords.filter(keyword => lowerPara.includes(keyword)).length;
     if (matchCount >= 2) {
       return false;
