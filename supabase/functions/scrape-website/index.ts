@@ -51,9 +51,35 @@ function extractLinks(html: string, baseUrl: string): Array<{ text: string; url:
   return links;
 }
 
+function cleanContent(content: string): string {
+  // Remove navigation links and unwanted elements
+  let cleaned = content
+    // Remove markdown links like [Jump to content](url)
+    .replace(/\[Jump to [^\]]+\]\([^)]+\)/gi, '')
+    // Remove standalone navigation phrases
+    .replace(/^(Skip to |Jump to |Go to )[^\n]+$/gmi, '')
+    // Remove date banners like "December 8: An important update..."
+    .replace(/^[A-Za-z]+ \d+: [^\n]+$/gmi, '')
+    // Remove "LIVE" and similar status indicators
+    .replace(/^\s*LIVE\s*$/gmi, '')
+    // Remove extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return cleaned;
+}
+
 function extractKeywordContent(content: string, keywords: string[]): Array<{ text: string; importance: number }> {
+  // Clean content first
+  const cleaned = cleanContent(content);
+
   if (!keywords || keywords.length === 0) {
-    const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 50).slice(0, 4);
+    const sentences = cleaned.split(/[.!?]+/)
+      .filter(s => {
+        const trimmed = s.trim();
+        return trimmed.length > 50 && !trimmed.match(/^(Skip|Jump|LIVE)/i);
+      })
+      .slice(0, 4);
     return sentences.map((s, i) => ({
       text: s.trim(),
       importance: 10 - i * 2
@@ -61,14 +87,18 @@ function extractKeywordContent(content: string, keywords: string[]): Array<{ tex
   }
 
   const highlighted: Array<{ text: string; importance: number }> = [];
-  const paragraphs = content.split('\n').filter(p => p.trim().length > 30);
+  const paragraphs = cleaned.split('\n')
+    .filter(p => {
+      const trimmed = p.trim();
+      return trimmed.length > 50 && !trimmed.match(/^[\[\(]/);
+    });
 
   for (const keyword of keywords) {
     const keywordLower = keyword.toLowerCase();
     for (const para of paragraphs) {
       if (para.toLowerCase().includes(keywordLower)) {
         const sentences = para.split(/[.!?]+/).filter(s =>
-          s.toLowerCase().includes(keywordLower) && s.trim().length > 20
+          s.toLowerCase().includes(keywordLower) && s.trim().length > 30
         );
 
         for (const sentence of sentences) {
@@ -83,9 +113,20 @@ function extractKeywordContent(content: string, keywords: string[]): Array<{ tex
     }
   }
 
+  // If no keyword matches, get first meaningful paragraph
+  if (highlighted.length === 0) {
+    const firstPara = paragraphs.find(p => p.length > 100);
+    if (firstPara) {
+      highlighted.push({
+        text: firstPara.substring(0, 200),
+        importance: 8
+      });
+    }
+  }
+
   return highlighted.length > 0 ? highlighted : [{
-    text: paragraphs[0] || 'Content extracted from website',
-    importance: 8
+    text: 'Content extracted from website',
+    importance: 5
   }];
 }
 
@@ -192,22 +233,42 @@ Facebook Post (200-300 words, conversational):
 }
 
 function createFallbackAnalysis(content: string, keywords: string[], title: string) {
-  const paragraphs = content.split(/\n\n+/).filter(p => p.trim().length > 50);
-  const summary = paragraphs.slice(0, 2).join('\n\n') || 'Content extracted from website.';
+  // Clean the content first
+  const cleanedContent = cleanContent(content);
+
+  // Extract meaningful paragraphs (skip short ones and navigation)
+  const paragraphs = cleanedContent
+    .split(/\n\n+/)
+    .filter(p => {
+      const trimmed = p.trim();
+      return (
+        trimmed.length > 100 && // Longer paragraphs only
+        !trimmed.match(/^[\[\(]/) && // Skip if starts with [ or (
+        !trimmed.match(/^(Skip|Jump|Go to|LIVE|Menu)/i) // Skip navigation
+      );
+    });
+
+  // Get the best summary paragraphs
+  const summaryParagraphs = paragraphs.slice(0, 3);
+  const summary = summaryParagraphs.join('\n\n') || `${title} - Content extracted from website.`;
 
   const keywordText = keywords.length > 0 ? ` about ${keywords.join(', ')}` : '';
 
+  // Create better social media posts
+  const firstSentence = summaryParagraphs[0]?.split(/[.!?]/)[0] || title;
+  const shortDesc = summary.substring(0, 200).replace(/\n/g, ' ');
+
   return {
     sourceSummary: summary,
-    shortSummary: summary.substring(0, 300),
-    verifiedOrigin: `Content extracted from ${title}${keywordText}.`,
-    futureForcast: `Current information${keywordText} as of 2024.`,
-    keyInsights: paragraphs.slice(0, 5).map((text, i) => ({ text, importance: 10 - i })),
+    shortSummary: summary.substring(0, 400),
+    verifiedOrigin: `Information about ${title}${keywordText}. This content provides an overview of the topic with key details and context.`,
+    futureForcast: `Current information${keywordText} as of 2024. This represents the latest available data on the subject.`,
+    keyInsights: paragraphs.slice(0, 8).map((text, i) => ({ text: text.substring(0, 200), importance: 10 - i })),
     keywordRelevanceScore: keywords.length > 0 ? 5 : undefined,
-    linkedinPost: `Interesting insights${keywordText}. Check out: ${title}`,
-    twitterPost: `${title}${keywordText}`,
-    instagramCaption: `${summary.substring(0, 150)}`,
-    facebookPost: summary.substring(0, 200)
+    linkedinPost: `${firstSentence}. Learn more about ${title}${keywordText}. #${title.replace(/\s+/g, '')} #Industry #Knowledge`,
+    twitterPost: `${firstSentence.substring(0, 200)}${keywordText} 🔍 #${title.replace(/\s+/g, '').substring(0, 20)}`,
+    instagramCaption: `${shortDesc}\n\n${keywordText ? `🔍 Focus: ${keywords.join(', ')}\n\n` : ''}#${title.replace(/\s+/g, '').substring(0, 20)} #knowledge #learning #education #information #discover #explore #facts #insights`,
+    facebookPost: `${summary.substring(0, 300)}\n\nInterested in learning more${keywordText}? This comprehensive overview covers the essential aspects and latest information.`
   };
 }
 
