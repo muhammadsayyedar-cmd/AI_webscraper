@@ -5,13 +5,11 @@ import confetti from 'canvas-confetti';
 import { performScrape } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { ScrapeData } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
 import ResultsDisplay from './ResultsDisplay';
 import LoadingProgress from './LoadingProgress';
 
 export default function Scraper() {
   const location = useLocation();
-  const { user } = useAuth();
   const [url, setUrl] = useState('');
   const [keywords, setKeywords] = useState('');
   const [useGemini, setUseGemini] = useState(true);
@@ -84,19 +82,13 @@ export default function Scraper() {
   };
 
   const handleSave = async () => {
-    if (!results || !user) return;
+    if (!results) return;
 
     setIsSaving(true);
     try {
-      // Add user_id to the scrape data
-      const dataToSave = {
-        ...results,
-        user_id: user.id,
-      };
-
       const { data, error: saveError } = await supabase
         .from('scrapes')
-        .insert([dataToSave])
+        .insert([results])
         .select()
         .single();
 

@@ -2,11 +2,9 @@ import { useState, useEffect } from 'react';
 import { Trash2, ExternalLink, Calendar, Search, Loader2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { ScrapeData } from '../lib/supabase';
-import { useAuth } from '../contexts/AuthContext';
 import ResultsDisplay from './ResultsDisplay';
 
 export default function Dashboard() {
-  const { user } = useAuth();
   const [scrapes, setScrapes] = useState<ScrapeData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,22 +13,16 @@ export default function Dashboard() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      loadScrapes();
-    }
-  }, [user]);
+    loadScrapes();
+  }, []);
 
   const loadScrapes = async () => {
-    if (!user) return;
-    
     setIsLoading(true);
     setError('');
     try {
-      // Fetch only scrapes for the current user
       const { data, error: fetchError } = await supabase
         .from('scrapes')
         .select('*')
-        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -54,8 +46,7 @@ export default function Dashboard() {
       const { error: deleteError } = await supabase
         .from('scrapes')
         .delete()
-        .eq('id', id)
-        .eq('user_id', user?.id); // Ensure user can only delete their own scrapes
+        .eq('id', id);
 
       if (deleteError) throw deleteError;
 
