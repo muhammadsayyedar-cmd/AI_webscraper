@@ -542,42 +542,12 @@ export async function performScrape(url: string, keywords: string[] = [], useGem
 
     console.log('✅ Edge function completed successfully');
     console.log('📝 Result data:', scrapeResult.data);
-
-    // Perform additional AI analysis if we have Gemini API key
-    if (useGemini && scrapeResult.data.raw_content) {
-      console.log('🔮 Performing additional AI analysis...');
-
-      try {
-        const pageTitle = scrapeResult.data.title;
-        const analysisResult = await analyzeWithGeminiResearch(
-          scrapeResult.data.raw_content,
-          keywords,
-          url,
-          pageTitle
-        );
-
-        // Enhance the result with detailed AI analysis
-        scrapeResult.data = {
-          ...scrapeResult.data,
-          meta_description: analysisResult.sourceSummary || scrapeResult.data.meta_description,
-          verified_origin: analysisResult.verifiedOrigin,
-          future_forecast: analysisResult.futureForcast,
-          keyword_relevance_score: analysisResult.keywordRelevanceScore,
-          linkedin_post: analysisResult.linkedinPost,
-          twitter_post: analysisResult.twitterPost,
-          instagram_caption: analysisResult.instagramCaption,
-          facebook_post: analysisResult.facebookPost,
-          key_highlights: analysisResult.keyHighlights,
-          short_summary: analysisResult.shortSummary,
-          highlighted_content: analysisResult.keyInsights,
-        };
-
-        console.log('✅ AI analysis complete and merged');
-      } catch (aiError) {
-        console.warn('⚠️ AI analysis failed, using edge function results:', aiError);
-        // Continue with edge function results
-      }
-    }
+    console.log('📱 Social media posts:', {
+      linkedin: !!scrapeResult.data.linkedin_post,
+      twitter: !!scrapeResult.data.twitter_post,
+      instagram: !!scrapeResult.data.instagram_caption,
+      facebook: !!scrapeResult.data.facebook_post
+    });
 
     return {
       success: true,
