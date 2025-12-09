@@ -1,6 +1,36 @@
-// Add this function to your api.ts file (replace the existing saveScrape function)
-
 import { supabase, ScrapeData } from '../lib/supabase';
+
+export async function performScrape(
+  url: string,
+  keywords: string[] = [],
+  useGemini: boolean = true
+): Promise<{ success: boolean; data?: ScrapeData; error?: string }> {
+  try {
+    const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scrape-website`;
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url, keywords, useGemini }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error('Scrape error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to scrape website',
+    };
+  }
+}
 
 export async function saveScrapeWithUser(scrapeData: ScrapeData, userId: string) {
   try {
