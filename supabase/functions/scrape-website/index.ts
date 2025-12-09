@@ -90,7 +90,7 @@ function extractKeywordContent(content: string, keywords: string[]): Array<{ tex
 }
 
 async function generateAISummary(content: string, keywords: string[], url: string, useGemini: boolean): Promise<string> {
-  const GEMINI_API_KEY = Deno.env.get('VITE_GEMINI_API_KEY');
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY') || Deno.env.get('VITE_GEMINI_API_KEY');
 
   if (!GEMINI_API_KEY) {
     return `Analysis of ${new URL(url).hostname}: ${content.slice(0, 300)}...`;
@@ -155,7 +155,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const FIRECRAWL_API_KEY = Deno.env.get('VITE_FIRECRAWL_API_KEY');
+    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY') || Deno.env.get('VITE_FIRECRAWL_API_KEY');
 
     if (!FIRECRAWL_API_KEY) {
       return new Response(
